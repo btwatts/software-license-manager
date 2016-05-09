@@ -7,6 +7,7 @@
  * 2) slm_activate
  * 3) slm_deactivate
  * 4) slm_check
+ * 5) slm_update
  */
 
 class SLM_API_Listener {
@@ -19,6 +20,7 @@ class SLM_API_Listener {
             $this->activation_api_listener();
             $this->deactivation_api_listener();
             $this->check_api_listener();
+            $this->update_api_listener();
         }
     }
 
@@ -226,5 +228,47 @@ class SLM_API_Listener {
             }            
         }
     }
+
+	function update_api_listener() {
+		if (isset($_REQUEST['slm_action']) && trim($_REQUEST['slm_action']) == 'slm_update') {
+			//Handle the licene update API query
+			global $slm_debug_logger;
+
+			$options = get_option('slm_plugin_options');
+			$lic_key_prefix = $options['lic_prefix'];
+
+			/* Note:  Update is similar to create so we require CREATE keys to do updates. */
+			SLM_API_Utility::verify_secret_key_for_creation(); //Verify the secret key first.
+
+			$slm_debug_logger->log_debug("API - license modification (slm_update) request received.");
+
+			//Action hook
+			do_action('slm_api_listener_slm_update');
+
+			$fields = array();
+			if (isset($_REQUEST['license_key']) && !empty($_REQUEST['license_key'])){
+				$license_key['license_key'] = strip_tags($_REQUEST['license_key']);//Use the key you pass via the request
+			} else {
+			  // I THINK THIS IS WHERE WE MUST BAIL.
+			  return;
+			}
+
+			$fields['lic_status']   = 'active';
+			$fields['date_expiry']  = isset($_REQUEST['date_expiry'])?strip_tags($_REQUEST['date_expiry']):'';
+			$fields['date_renewed'] = date('Y-m-d');
+
+			global $wpdb;
+			$tbl_name = SLM_TBL_LICENSE_KEYS;
+			$result = $wpdb->update($tbl_name, $fields, $license_key);
+			if ($result === false) {
+				//error inserting
+				$args = (array('result' => 'error', 'message' => 'License update failed'));
+				SLM_API_Utility::output_api_response($args);
+			} else {
+				$args = (array('result' => 'success', 'message' => 'License successfully updated', 'key' => $license_key['license_key']));
+				SLM_API_Utility::output_api_response($args);
+			}
+		}
+	}
 
 }
